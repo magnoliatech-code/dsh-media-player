@@ -128,6 +128,12 @@ const audio = audioTree.find((node) => node.type === 'audio');
 if (!audio) problems.push('audio file renders no <audio>');
 else if (audio.props.src !== 'http://127.0.0.1:8099/m/aud/M1.mp3') problems.push(`audio src is ${audio.props.src}`);
 
+// A container Chromium cannot decode gets an explanation rather than a dead frame.
+useStateCalls = 0;
+nextStates = [{ status: 'ready', media }, 1, false, false, true];
+const decodeTree = tree(body.component({ ...props }));
+if (!/cannot decode/i.test(JSON.stringify(decodeTree))) problems.push('decode failure is not explained');
+
 useStateCalls = 0;
 nextStates = [{ status: 'failed', message: 'not under the player root' }, 1, false, false];
 const failedTree = tree(body.component({ ...props }));

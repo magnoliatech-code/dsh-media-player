@@ -1,0 +1,548 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Media Player</title>
+<style>
+  :root {
+    --bg: #141517;
+    --panel: #1b1c1f;
+    --panel-2: #212226;
+    --line: #2c2e33;
+    --text: #e7e8ea;
+    --muted: #9498a0;
+    --accent: #7aa2ff;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 13px/1.5 ui-sans-serif, -apple-system, "Segoe UI", Inter, Roboto, sans-serif;
+    display: grid;
+    grid-template-columns: 290px minmax(0, 1fr);
+    overflow: hidden;
+  }
+  button, select, input { font: inherit; color: inherit; }
+
+  /* ---------- playlist ---------- */
+  aside {
+    border-right: 1px solid var(--line);
+    background: var(--panel);
+    display: grid;
+    grid-template-rows: auto auto minmax(0, 1fr) auto;
+    min-height: 0;
+  }
+  .brand {
+    padding: 14px 14px 10px;
+    display: flex; align-items: baseline; gap: 8px;
+  }
+  .brand b { font-size: 13px; letter-spacing: .02em; }
+  .brand span { color: var(--muted); font-size: 11px; }
+  .search { padding: 0 12px 10px; display: grid; gap: 6px; }
+  .search input[type="search"] {
+    width: 100%; padding: 7px 10px;
+    background: var(--panel-2); border: 1px solid var(--line);
+    border-radius: 8px; outline: none;
+  }
+  .search input[type="search"]:focus { border-color: #43507a; }
+  .toggle {
+    display: flex; align-items: center; gap: 6px; cursor: pointer;
+    color: var(--muted); font-size: 11px; user-select: none; padding-left: 2px;
+  }
+  .toggle input { accent-color: var(--accent); margin: 0; }
+  .list { overflow-y: auto; padding: 0 8px 12px; min-height: 0; }
+  .list::-webkit-scrollbar { width: 10px; }
+  .list::-webkit-scrollbar-thumb { background: #33353b; border-radius: 8px; border: 2px solid var(--panel); }
+  .group {
+    color: var(--muted); font-size: 10.5px; text-transform: uppercase;
+    letter-spacing: .07em; padding: 12px 6px 5px;
+  }
+  .item {
+    display: grid; gap: 1px; width: 100%; text-align: left;
+    padding: 7px 9px; border: 0; border-radius: 8px;
+    background: transparent; cursor: pointer;
+  }
+  .item:hover { background: #24262b; }
+  .item[aria-current="true"] { background: #2b3554; }
+  .item .name {
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    display: flex; align-items: center; gap: 7px;
+  }
+  .item .name svg { flex: none; opacity: .75; }
+  .item .meta { color: var(--muted); font-size: 11px; padding-left: 22px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .empty { color: var(--muted); padding: 18px 10px; text-align: center; }
+  .foot {
+    border-top: 1px solid var(--line); padding: 9px 14px;
+    color: var(--muted); font-size: 11px; display: flex; justify-content: space-between; gap: 8px;
+  }
+  .foot a { color: var(--muted); }
+  .dot { color: #5a5f68; }
+
+  /* ---------- stage ---------- */
+  main { display: grid; grid-template-rows: minmax(0, 1fr) auto; min-height: 0; }
+  .stage {
+    display: grid; place-items: center; min-height: 0; padding: 16px 16px 8px;
+    background: radial-gradient(120% 90% at 50% 0%, #191b20 0%, var(--bg) 70%);
+  }
+  .stage video {
+    max-width: 100%; max-height: 100%; background: #000;
+    border-radius: var(--radius); box-shadow: 0 10px 40px #0009;
+    display: none;
+  }
+  .stage video.on { display: block; }
+  .audio-card {
+    display: none; width: min(560px, 100%);
+    background: linear-gradient(180deg, #202329, #1a1b1f);
+    border: 1px solid var(--line); border-radius: 14px;
+    padding: 22px 22px 16px; text-align: center;
+  }
+  .audio-card.on { display: block; }
+  .audio-card .art {
+    width: 84px; height: 84px; margin: 0 auto 14px;
+    border-radius: 50%; display: grid; place-items: center;
+    background: radial-gradient(circle at 30% 25%, #3a4a75, #232a3d 65%, #1b1e26);
+    border: 1px solid #39415a;
+  }
+  .bars { display: flex; align-items: flex-end; gap: 3px; height: 30px; }
+  .bars i {
+    width: 4px; border-radius: 2px; background: var(--accent);
+    height: 20%; opacity: .55;
+  }
+  .audio-card.playing .bars i { animation: eq .9s ease-in-out infinite alternate; }
+  .audio-card .bars i:nth-child(2) { animation-delay: .1s; }
+  .audio-card .bars i:nth-child(3) { animation-delay: .2s; }
+  .audio-card .bars i:nth-child(4) { animation-delay: .3s; }
+  .audio-card .bars i:nth-child(5) { animation-delay: .15s; }
+  @keyframes eq { from { height: 18%; } to { height: 100%; } }
+  .audio-card h2 { font-size: 14px; font-weight: 600; margin: 0 0 2px; word-break: break-all; }
+  .audio-card p { color: var(--muted); font-size: 11.5px; margin: 0 0 14px; word-break: break-all; }
+  .audio-card audio { width: 100%; }
+  .idle { color: var(--muted); text-align: center; max-width: 460px; }
+  .idle.on { display: block; }
+  .idle h2 { color: var(--text); font-size: 15px; font-weight: 600; margin: 0 0 6px; }
+  .idle kbd {
+    background: var(--panel-2); border: 1px solid var(--line); border-bottom-width: 2px;
+    border-radius: 5px; padding: 1px 5px; font: 11px ui-monospace, monospace; color: #cfd3da;
+  }
+  .idle p { margin: 8px 0 0; }
+
+  /* ---------- bar ---------- */
+  .bar {
+    border-top: 1px solid var(--line); background: var(--panel);
+    padding: 9px 14px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  }
+  .path {
+    font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; color: #c3c8d2;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1 1 160px; min-width: 0;
+  }
+  .path span { color: var(--muted); }
+  .chip {
+    color: var(--muted); font-size: 11px; white-space: nowrap;
+    border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px;
+  }
+  .ctl { display: flex; align-items: center; gap: 6px; }
+  .ctl label { color: var(--muted); font-size: 11px; }
+  select, .btn {
+    background: var(--panel-2); border: 1px solid var(--line);
+    border-radius: 7px; padding: 4px 8px; cursor: pointer;
+  }
+  .btn:hover, select:hover { border-color: #3a3d45; }
+  .btn:disabled { opacity: .4; cursor: default; }
+  .toast {
+    position: fixed; left: 50%; bottom: 64px; transform: translate(-50%, 8px);
+    background: #2a2d35; border: 1px solid var(--line); color: var(--text);
+    padding: 7px 12px; border-radius: 8px; font-size: 12px;
+    opacity: 0; pointer-events: none; transition: opacity .16s, transform .16s;
+  }
+  .toast.on { opacity: 1; transform: translate(-50%, 0); }
+  @media (max-width: 720px) {
+    body { grid-template-columns: 1fr; grid-template-rows: 40vh 1fr; }
+    aside { border-right: 0; border-bottom: 1px solid var(--line); }
+    .foot { display: none; }
+  }
+</style>
+</head>
+<body>
+<aside>
+  <div class="brand"><b>Media</b><span id="count"></span></div>
+  <div class="search">
+    <input id="q" type="search" placeholder="Filter files…" autocomplete="off" spellcheck="false">
+    <label class="toggle"><input id="all" type="checkbox"> include scratch folders</label>
+  </div>
+  <div class="list" id="list"></div>
+  <div class="foot">
+    <span id="root" title=""></span>
+    <a href="" target="_blank" rel="noopener" id="newtab">open tab ↗</a>
+  </div>
+</aside>
+
+<main>
+  <div class="stage" id="stage">
+    <div class="idle on" id="idle">
+      <h2>Pick a file to play</h2>
+      <p><kbd>space</kbd> play · <kbd>←</kbd><kbd>→</kbd> 5s · <kbd>J</kbd><kbd>L</kbd> 10s · <kbd>↑</kbd><kbd>↓</kbd> volume · <kbd>M</kbd> mute · <kbd>F</kbd> fullscreen · <kbd>N</kbd><kbd>P</kbd> next/prev</p>
+      <p>Video seeks with HTTP Range, so multi‑gigabyte renders stream instead of downloading.</p>
+    </div>
+    <video id="video" playsinline controls></video>
+    <div class="audio-card" id="audiocard">
+      <div class="art"><div class="bars"><i></i><i></i><i></i><i></i><i></i></div></div>
+      <h2 id="aname">—</h2>
+      <p id="apath"></p>
+      <audio id="audio" controls></audio>
+    </div>
+  </div>
+
+  <div class="bar">
+    <div class="path" id="path"><span>no file selected</span></div>
+    <span class="chip" id="size" hidden></span>
+    <div class="ctl">
+      <label for="rate">speed</label>
+      <select id="rate">
+        <option>0.5</option><option>0.75</option><option selected>1</option>
+        <option>1.25</option><option>1.5</option><option>1.75</option><option>2</option>
+      </select>
+    </div>
+    <button class="btn" id="copy" disabled title="Copy the stream URL">copy link</button>
+    <button class="btn" id="reveal" disabled title="Open the file in a new browser tab">open file</button>
+  </div>
+</main>
+<div class="toast" id="toast"></div>
+
+<script type="module">
+const $ = (id) => document.getElementById(id);
+const video = $('video'), audio = $('audio');
+const state = { files: [], current: null, root: '', positions: loadPositions() };
+let toastTimer = 0;
+
+function toast(msg) {
+  const el = $('toast');
+  el.textContent = msg;
+  el.classList.add('on');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('on'), 1600);
+}
+
+function loadPositions() {
+  try { return new Map(Object.entries(JSON.parse(localStorage.getItem('dsh-player-positions') || '{}'))); }
+  catch { return new Map(); }
+}
+function savePositions() {
+  const o = {};
+  for (const [k, v] of state.positions) o[k] = v;
+  try { localStorage.setItem('dsh-player-positions', JSON.stringify(o)); } catch {}
+}
+
+const bytes = (n) => n < 1024 ? n + ' B'
+  : n < 1048576 ? (n / 1024).toFixed(1) + ' KB'
+  : n < 1073741824 ? (n / 1048576).toFixed(1) + ' MB'
+  : (n / 1073741824).toFixed(2) + ' GB';
+const clock = (s) => {
+  if (!Number.isFinite(s)) return '0:00';
+  s = Math.max(0, Math.floor(s));
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+  return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(sec).padStart(2, '0');
+};
+const isAudio = (f) => f.kind === 'audio';
+const streamUrl = (f) => '/m/' + f.path.split('/').map(encodeURIComponent).join('/');
+/** Shareable page URL that opens the player on one file. */
+const deepLink = (path) => location.origin + '/#play=' + encodeURIComponent(path);
+
+/**
+ * Read `#play=<path>` or `?play=<path>` and map it onto an indexed file.
+ * Accepts a path relative to the served root or an absolute filesystem path.
+ * @returns the matching indexed path, or null when nothing matches.
+ */
+function wantedPath() {
+  const hash = location.hash.replace(/^#/, '');
+  const query = new URLSearchParams(location.search).get('play') || '';
+  const raw = hash.startsWith('play=') ? hash.slice(5) : (hash || query);
+  if (!raw) return null;
+  let p;
+  try { p = decodeURIComponent(raw); } catch { p = raw; }
+  p = p.replace(/\\/g, '/').replace(/^\/+/, '');
+  const root = state.root.replace(/^\/+|\/+$/g, '');
+  if (root && p.startsWith(root + '/')) p = p.slice(root.length + 1);
+  p = p.replace(/^\.\//, '');
+  if (state.files.some((f) => f.path === p)) return p;
+  const matches = state.files.filter((f) => f.path.endsWith('/' + p));
+  return matches.length === 1 ? matches[0].path : null;
+}
+
+/** Reflect the current file in the address bar so the page can be shared. */
+function syncLocation(path) {
+  const next = '#play=' + encodeURIComponent(path);
+  if (location.hash === next) return;
+  try { history.replaceState(null, '', next); }
+  catch { /* sandboxed frame may refuse; the player still works */ }
+}
+
+const ICON_VIDEO = '<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="1.5" y="3" width="9" height="10" rx="1.6"/><path d="M10.5 6.6 14 4.6v6.8l-3.5-2z"/></svg>';
+const ICON_AUDIO = '<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M6 12.2V4.1l6-1.3v7.6"/><circle cx="4.3" cy="12.3" r="1.7"/><circle cx="10.3" cy="10.9" r="1.7"/></svg>';
+
+const SCRATCH = /(^|\/)(_[^/]*|raw|wav)(\/|$)/;
+const dirOf = (f) => (f.path.includes('/') ? f.path.slice(0, f.path.lastIndexOf('/')) : '');
+
+/** Group files by directory, shallow directories first, newest file first inside each. */
+function visibleGroups() {
+  const q = $('q').value.trim().toLowerCase();
+  const all = $('all').checked;
+  const kept = state.files.filter((f) => {
+    // The playing file stays listed under any filter, so a shared link always shows its row.
+    if (f.path === state.current) return true;
+    if (!all && !q && SCRATCH.test(f.path)) return false;
+    return !q || f.path.toLowerCase().includes(q) || f.name.toLowerCase().includes(q) || f.kind.includes(q);
+  });
+  const groups = new Map();
+  for (const f of kept) {
+    const d = dirOf(f);
+    if (!groups.has(d)) groups.set(d, []);
+    groups.get(d).push(f);
+  }
+  const dirs = [...groups.keys()].sort((a, b) =>
+    (a.split('/').length - b.split('/').length) || a.localeCompare(b));
+  for (const d of dirs) groups.get(d).sort((a, b) => b.mtime - a.mtime);
+  return { groups, dirs };
+}
+
+function render() {
+  const list = $('list');
+  list.textContent = '';
+  const { groups, dirs } = visibleGroups();
+  const kept = dirs.reduce((n, d) => n + groups.get(d).length, 0);
+  $('count').textContent = kept === state.files.length
+    ? state.files.length + ' files'
+    : kept + ' of ' + state.files.length;
+
+  if (!kept) {
+    const p = document.createElement('div');
+    p.className = 'empty';
+    p.textContent = state.files.length ? 'Nothing matches that filter.' : 'No media files found under this root.';
+    list.append(p);
+    return;
+  }
+
+  for (const dir of dirs) {
+    const h = document.createElement('div');
+    h.className = 'group';
+    h.textContent = dir || 'workspace root';
+    h.title = dir || '.';
+    list.append(h);
+
+    for (const f of groups.get(dir)) {
+      const b = document.createElement('button');
+      b.className = 'item';
+      b.type = 'button';
+      b.dataset.path = f.path;
+      b.setAttribute('aria-current', String(state.current === f.path));
+      const name = document.createElement('div');
+      name.className = 'name';
+      name.innerHTML = isAudio(f) ? ICON_AUDIO : ICON_VIDEO;
+      const t = document.createElement('span');
+      t.textContent = f.name;
+      t.style.overflow = 'hidden';
+      t.style.textOverflow = 'ellipsis';
+      t.style.whiteSpace = 'nowrap';
+      name.append(t);
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+      const pos = state.positions.get(f.path);
+      meta.textContent = bytes(f.size) + (pos ? ' · resumed ' + clock(pos) : '');
+      b.append(name, meta);
+      b.onclick = () => select(f.path, true);
+      list.append(b);
+    }
+  }
+}
+
+function activeEl() { return state.current ? document.querySelector(`.item[data-path="${CSS.escape(state.current)}"]`) : null; }
+
+function mediaEl() { return state.current && isAudio(state.files.find((f) => f.path === state.current)) ? audio : video; }
+
+function savePosition() {
+  const f = state.files.find((x) => x.path === state.current);
+  if (!f) return;
+  const el = mediaEl();
+  if (!el.duration || !Number.isFinite(el.duration)) return;
+  const t = el.currentTime;
+  if (t > 5 && el.duration - t > 15) state.positions.set(f.path, t);
+  else state.positions.delete(f.path);
+  savePositions();
+}
+
+async function select(path, isGesture) {
+  if (state.current === path) {
+    const el = mediaEl();
+    if (el.paused) el.play().catch(() => {}); else el.pause();
+    return;
+  }
+  savePosition();
+  const f = state.files.find((x) => x.path === path);
+  if (!f) return;
+
+  video.pause(); audio.pause();
+  state.current = path;
+  $('idle').classList.remove('on');
+  video.classList.toggle('on', !isAudio(f));
+  $('audiocard').classList.toggle('on', isAudio(f));
+  video.src = isAudio(f) ? '' : streamUrl(f);
+  audio.src = isAudio(f) ? streamUrl(f) : '';
+  if (isAudio(f)) {
+    $('aname').textContent = f.name;
+    $('apath').textContent = f.path;
+  }
+  const el = mediaEl();
+  el.playbackRate = Number($('rate').value);
+  el.currentTime = state.positions.get(path) || 0;
+  $('path').innerHTML = '';
+  const sp = document.createElement('span');
+  const dir = f.path.includes('/') ? f.path.slice(0, f.path.lastIndexOf('/') + 1) : '';
+  sp.textContent = dir;
+  $('path').append(sp, f.name);
+  $('path').title = f.path;
+  $('size').hidden = false;
+  $('size').textContent = bytes(f.size);
+  $('copy').disabled = false;
+  $('reveal').disabled = false;
+  render();
+  syncLocation(path);
+  if (isGesture) el.play().catch(() => {});
+  const pos = state.positions.get(path);
+  if (pos) toast('resumed at ' + clock(pos));
+}
+
+function step(delta) {
+  const el = mediaEl();
+  if (!el.duration) return;
+  el.currentTime = Math.min(Math.max(0, el.currentTime + delta), el.duration - 0.3);
+}
+
+function neighbors(d) {
+  if (!state.current) return;
+  const i = state.files.findIndex((f) => f.path === state.current);
+  const next = state.files[i + d];
+  if (next) select(next.path, true);
+}
+
+for (const el of [video, audio]) {
+  el.addEventListener('pause', savePosition);
+  el.addEventListener('ended', () => { savePosition(); neighbors(1); });
+  el.addEventListener('timeupdate', () => { if (Math.floor(el.currentTime) % 5 === 0) savePosition(); });
+  el.addEventListener('dblclick', () => toggleFullscreen());
+}
+video.addEventListener('play', () => $('audiocard').classList.remove('playing'));
+audio.addEventListener('play', () => $('audiocard').classList.add('playing'));
+audio.addEventListener('pause', () => $('audiocard').classList.remove('playing'));
+
+function toggleFullscreen() {
+  const el = state.current && isAudio(state.files.find((f) => f.path === state.current)) ? $('audiocard') : video;
+  if (document.fullscreenElement) document.exitFullscreen();
+  else el.requestFullscreen?.().catch(() => toast('fullscreen blocked in this frame'));
+}
+
+$('rate').addEventListener('change', (e) => {
+  const el = mediaEl();
+  if (el) el.playbackRate = Number(e.target.value);
+});
+$('copy').onclick = async () => {
+  const f = state.files.find((x) => x.path === state.current);
+  if (!f) return;
+  const url = deepLink(f.path);
+  try { await navigator.clipboard.writeText(url); toast('copied player link'); }
+  catch { toast(url); }
+};
+$('reveal').onclick = () => {
+  const f = state.files.find((x) => x.path === state.current);
+  if (f) window.open(streamUrl(f), '_blank', 'noopener');
+};
+$('newtab').href = location.href;
+$('q').addEventListener('input', render);
+$('all').checked = localStorage.getItem('dsh-player-all') === '1';
+$('all').addEventListener('change', () => {
+  localStorage.setItem('dsh-player-all', $('all').checked ? '1' : '0');
+  render();
+});
+
+addEventListener('keydown', (e) => {
+  const tag = (e.target.tagName || '').toLowerCase();
+  if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
+  const k = e.key.toLowerCase();
+  const el = mediaEl();
+  if (!state.current) return;
+  if (k === ' ') { e.preventDefault(); if (el.paused) el.play().catch(() => {}); else el.pause(); return; }
+  if (k === 'arrowright') { e.preventDefault(); step(5); }
+  else if (k === 'arrowleft') { e.preventDefault(); step(-5); }
+  else if (k === 'l') step(10);
+  else if (k === 'j') step(-10);
+  else if (k === 'arrowup') { e.preventDefault(); el.volume = Math.min(1, el.volume + 0.05); toast('volume ' + Math.round(el.volume * 100) + '%'); }
+  else if (k === 'arrowdown') { e.preventDefault(); el.volume = Math.max(0, el.volume - 0.05); toast('volume ' + Math.round(el.volume * 100) + '%'); }
+  else if (k === 'm') { el.muted = !el.muted; toast(el.muted ? 'muted' : 'unmuted'); }
+  else if (k === 'f') toggleFullscreen();
+  else if (k === 'n') neighbors(1);
+  else if (k === 'p') neighbors(-1);
+  else if (k >= '0' && k <= '9' && el.duration) el.currentTime = el.duration * (Number(k) / 10);
+  else return;
+  if (k !== 'arrowup' && k !== 'arrowdown' && k !== 'm') activeEl()?.scrollIntoView({ block: 'nearest' });
+});
+
+async function load() {
+  let data;
+  try {
+    const r = await fetch('/api/media', { cache: 'no-store' });
+    data = await r.json();
+  } catch { $('count').textContent = 'offline'; return; }
+  state.files = data.files;
+  state.root = data.root;
+  $('root').textContent = data.root.split('/').filter(Boolean).pop() || data.root;
+  $('root').title = data.root;
+  render();
+
+  const linked = wantedPath();
+  if (linked) {
+    await select(linked, false);
+    activeEl()?.scrollIntoView({ block: 'center' });
+    // A link is an arrival, not a click; browsers may still refuse the sound.
+    mediaEl().play().catch(() => toast('press play to start'));
+    if (!wantedPath()) toast('file not found: ' + decodeURIComponent(location.hash));
+    return;
+  }
+
+  const last = localStorage.getItem('dsh-player-last');
+  if (!state.current && last && data.files.some((f) => f.path === last)) {
+    // restore the file but wait for a gesture before playing
+    state.current = last;
+    await select(last, false);
+    activeEl()?.scrollIntoView({ block: 'center' });
+  }
+}
+
+addEventListener('hashchange', async () => {
+  const linked = wantedPath();
+  if (!linked) return;
+  await select(linked, false);
+  activeEl()?.scrollIntoView({ block: 'center' });
+  mediaEl().play().catch(() => {});
+});
+
+load();
+setInterval(async () => {
+  try {
+    const r = await fetch('/api/media', { cache: 'no-store' });
+    const d = await r.json();
+    if (d.files.length !== state.files.length || d.files.at(-1)?.path !== state.files.at(-1)?.path) {
+      state.files = d.files;
+      render();
+    }
+  } catch {}
+}, 10000);
+addEventListener('beforeunload', savePosition);
+document.addEventListener('click', (e) => {
+  const item = e.target.closest?.('.item');
+  if (item?.dataset.path) localStorage.setItem('dsh-player-last', item.dataset.path);
+}, true);
+</script>
+</body>
+</html>

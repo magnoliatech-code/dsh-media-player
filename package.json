@@ -1,0 +1,26 @@
+{
+  "name": "dsh-media-player",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Loopback video/audio player for the DSH Web panel, with HTTP Range streaming for large renders",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./server": "./server.js",
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "dsh-media-player": "bin/media-player.js"
+  },
+  "files": [
+    "index.js",
+    "server.js",
+    "player.html",
+    "bin/",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  }
+}

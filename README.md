@@ -49,6 +49,21 @@ where you start it next.
 - Outside: open the same URL in any browser; it is not tied to the harness session.
 - Standalone, with the harness stopped: `node bin/media-player.js --root DIR --port N`.
 
+### Deep links
+
+`#play=<path>` opens the player on one file. The path may be relative to the served
+root or an absolute filesystem path, and selecting a file in the UI rewrites the
+fragment, so the address bar is always shareable:
+
+```
+http://127.0.0.1:8099/#play=ai_documentary/output/voice_audition/M1_UncleFu.mp3
+http://127.0.0.1:8099/#play=/home/chen/Projects/deepseek/ai_documentary/output/voice_audition/M1_UncleFu.mp3
+```
+
+Browsers refuse unmuted autoplay without a gesture, so an arrival through a link
+shows a **press to play** gate over video. Audio keeps its native controls instead.
+The linked file stays listed whatever filter is active, so its row is always visible.
+
 Endpoints: `/` player page, `/api/media` playlist JSON, `/api/health` liveness,
 `/m/<path>` and `/<path>` media with `Range` support.
 

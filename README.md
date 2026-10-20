@@ -29,7 +29,27 @@ Two constraints worth remembering:
   `pnpm add`, no profile dependency, and no build step is involved.
 
 Editing that file is picked up by HMR: the entry restarts, the old listener closes,
-and the new one binds — about 2.2 s here. No harness restart needed.
+and the new one binds — about 2.2 s here. No harness restart needed for config; the
+plugin's own code is a different story (see [Two halves](#two-halves)).
+
+## Two halves
+
+**Host** (`index.js`, `server.js`) owns the loopback HTTP listener and publishes its
+address into the page as `globalThis.dshMediaPlayer`, through the webserver's
+`index-inject` event, so the browser half never guesses a port.
+
+**Client** (`lib/client.js`) is a document-preview renderer. It claims
+`mp4 m4v mov webm mkv ogv mp3 m4a aac wav flac ogg opus weba` at the `extension`
+priority band, so clicking a media file in Files — or a chat link to one — opens a
+player tab instead of the "preview not available" fallback. It registers with
+`loading: 'renderer'`, which means the shared preview never reads the file: the
+renderer asks `/api/resolve` for a stream URL and hands it to the browser's own
+`<video>`/`<audio>`. Tab header, reload, and open-in-app keep working.
+
+Changes to either half need a **harness restart** (`dsh web`): a patch edit reloads
+the plugin entry, but Node caches the imported ES module, so the host code only
+changes on a new process. The client bundle is fetched on page load, so a page
+reload is enough for it.
 
 ## Config
 
@@ -65,7 +85,10 @@ shows a **press to play** gate over video. Audio keeps its native controls inste
 The linked file stays listed whatever filter is active, so its row is always visible.
 
 Endpoints: `/` player page, `/api/media` playlist JSON, `/api/health` liveness,
-`/m/<path>` and `/<path>` media with `Range` support.
+`/api/resolve?address=…` (or `?path=…`) mapping a resource address or path to a
+stream URL, then `/m/<path>` and `/<path>` media with `Range` support. JSON
+endpoints answer loopback `Origin`s only, so the harness page on another local port
+can read them while a public site cannot.
 
 ## Playlist
 
@@ -78,6 +101,15 @@ everything.
 Keys: `space` · `←/→` 5 s · `J/L` 10 s · `↑/↓` volume · `M` mute · `F` fullscreen
 (blocked inside the sandboxed Sidebar frame — use `open tab ↗`) · `N/P` next/previous
 · `0–9` tenths. Speed 0.5×–2×, and the playhead per file is kept in `localStorage`.
+
+## Tests
+
+```
+node test/smoke.mjs
+```
+
+Loads the bundle the way the harness does and checks the renderer registration,
+the video/audio render trees, the stream URLs, and the failure state.
 
 ## Exposure
 

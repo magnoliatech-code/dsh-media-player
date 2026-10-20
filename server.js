@@ -27,6 +27,21 @@ const AUDIO = new Set(['mp3', 'm4a', 'aac', 'wav', 'flac', 'ogg', 'opus', 'weba'
 const MEDIA = new Set([...VIDEO, ...AUDIO]);
 const SERVABLE = new Set([...MEDIA, 'srt', 'vtt']);
 const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', '.cache']);
+const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1', '[::1]']);
+
+/** Whether a browser Origin is itself loopback, so CORS never widens beyond the machine. */
+function isLoopbackOrigin(origin) {
+  try { return LOOPBACK_HOSTS.has(new URL(origin).hostname); } catch { return false; }
+}
+
+/** Allow the harness page (a different loopback port) to read the JSON API. */
+function applyCors(req, res) {
+  const origin = req.headers.origin;
+  if (typeof origin !== 'string' || !isLoopbackOrigin(origin)) return;
+  res.setHeader('Access-Control-Allow-Origin', origin);
+  res.setHeader('Vary', 'Origin');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD');
+}
 
 function send(res, status, body, headers = {}) {
   res.writeHead(status, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store', ...headers });
@@ -86,6 +101,44 @@ export function createMediaServer({ root, host = '127.0.0.1', port = 8099, log =
 
   let indexCache = { at: 0, value: null };
 
+  /** Encode one relative media path as a stream URL. */
+  const streamPath = (rel) => '/m/' + rel.split('/').map(encodeURIComponent).join('/');
+
+  /**
+   * Map a resource address (`dsh-resource://file/session/<id>/<path>`) or a plain
+   * path — absolute or workspace-relative — onto one indexed media file.
+   * @param input - address or path as the caller knows it.
+   * @returns `found`, `ambiguous`, `missing`, or `invalid`.
+   */
+  async function resolveMediaFile(input) {
+    if (typeof input !== 'string' || input.length === 0) return { kind: 'invalid' };
+    let raw = input;
+    if (raw.startsWith('dsh-resource:')) {
+      try { raw = new URL(raw).pathname; } catch { /* not a URL; use the raw text */ }
+    }
+    try { raw = decodeURIComponent(raw); } catch { /* keep the raw text */ }
+    const segments = raw.split('/').filter(Boolean);
+    const files = await mediaIndex();
+    const byPath = new Map(files.map((file) => [file.path, file]));
+    const rootName = rootDir.replace(/^\/+/, '');
+    for (let i = 0; i < segments.length; i += 1) {
+      const candidate = segments.slice(i).join('/');
+      const normalized = candidate.startsWith(rootName + '/') ? candidate.slice(rootName.length + 1) : candidate;
+      if (byPath.has(normalized)) return { kind: 'found', file: byPath.get(normalized) };
+    }
+    // Workspace-relative addresses have no server-root prefix; match by unique suffix.
+    for (let i = 0; i < segments.length; i += 1) {
+      const candidate = segments.slice(i).join('/');
+      const matches = files.filter((file) => file.path.endsWith('/' + candidate));
+      if (matches.length === 1) return { kind: 'found', file: matches[0] };
+      if (matches.length > 1) {
+        const recent = matches.slice(0, 8).map((file) => file.path);
+        return { kind: 'ambiguous', matches: recent };
+      }
+    }
+    return { kind: 'missing' };
+  }
+
   async function mediaIndex() {
     // The page polls; a directory walk per poll would be wasteful on a large root.
     if (indexCache.value && Date.now() - indexCache.at < 2500) return indexCache.value;
@@ -100,6 +153,7 @@ export function createMediaServer({ root, host = '127.0.0.1', port = 8099, log =
     if (!allowedHosts().has((req.headers.host || '').toLowerCase())) return send(res, 403, 'forbidden host');
     const url = new URL(req.url, 'http://' + req.headers.host);
     const pathname = url.pathname;
+    if (pathname.startsWith('/api/')) applyCors(req, res);
 
     if (pathname === '/' || pathname === '/player') {
       const html = await readFile(join(HERE, 'player.html'));
@@ -115,7 +169,33 @@ export function createMediaServer({ root, host = '127.0.0.1', port = 8099, log =
     }
 
     if (pathname === '/api/health') {
-      return send(res, 200, JSON.stringify({ ok: true, pid: process.pid, root: rootDir }), {
+      return send(res, 200, JSON.stringify({ ok: true, pid: process.pid, root: rootDir, port: boundPort }), {
+        'Content-Type': 'application/json; charset=utf-8',
+      });
+    }
+
+    if (pathname === '/api/resolve') {
+      const target = url.searchParams.get('address') || url.searchParams.get('path') || '';
+      const result = await resolveMediaFile(target);
+      if (result.kind === 'found') {
+        const { file } = result;
+        return send(res, 200, JSON.stringify({
+          path: file.path,
+          name: file.name,
+          kind: file.kind,
+          size: file.size,
+          mtime: file.mtime,
+          url: streamPath(file.path),
+          absolute: join(rootDir, file.path),
+          root: rootDir,
+        }), { 'Content-Type': 'application/json; charset=utf-8' });
+      }
+      if (result.kind === 'ambiguous') {
+        return send(res, 409, JSON.stringify({ error: 'ambiguous path', matches: result.matches }), {
+          'Content-Type': 'application/json; charset=utf-8',
+        });
+      }
+      return send(res, 404, JSON.stringify({ error: result.kind === 'invalid' ? 'no path given' : 'not under the media root' }), {
         'Content-Type': 'application/json; charset=utf-8',
       });
     }

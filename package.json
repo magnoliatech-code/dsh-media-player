@@ -1,12 +1,13 @@
 {
   "name": "dsh-media-player",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "Loopback video/audio player for the DSH Web panel, with HTTP Range streaming for large renders",
+  "description": "Loopback video/audio player for the DSH Web panel: Range streaming for large renders, plus a Sidebar preview renderer so clicking a media file plays it",
   "type": "module",
   "main": "index.js",
   "exports": {
     ".": "./index.js",
+    "./client": "./lib/client.js",
     "./server": "./server.js",
     "./package.json": "./package.json"
   },
@@ -17,10 +18,22 @@
     "index.js",
     "server.js",
     "player.html",
+    "lib/client.js",
     "bin/",
     "README.md"
   ],
   "engines": {
     "node": ">=20"
+  },
+  "dsh": {
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-sidebar-documentpreview"
+      ]
+    }
+  },
+  "scripts": {
+    "test": "node test/smoke.mjs"
   }
 }

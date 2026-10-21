@@ -35,5 +35,23 @@
   },
   "scripts": {
     "test": "node test/smoke.mjs"
-  }
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/magnoliatech-code/dsh-media-player.git"
+  },
+  "homepage": "https://github.com/magnoliatech-code/dsh-media-player#readme",
+  "bugs": {
+    "url": "https://github.com/magnoliatech-code/dsh-media-player/issues"
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "plugin",
+    "media-player",
+    "video",
+    "audio",
+    "range"
+  ]
 }
